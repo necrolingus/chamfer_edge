@@ -1,0 +1,2784 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EdgeCraft STL — Selective Edge Chamfer &amp; Fillet for TinkerCAD</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+        "manifold-3d": "https://cdn.jsdelivr.net/npm/manifold-3d@3.0.0/manifold.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- Top Header Bar -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
+          <line x1="12" y1="22" x2="12" y2="15.5" />
+          <polyline points="22 8.5 12 15.5 2 8.5" />
+          <line x1="7" y1="5.25" x2="17" y2="11.75" stroke="#0ea5e9" stroke-width="2.5" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="brand-title">EdgeCraft <span class="badge-stl">STL</span></h1>
+        <p class="brand-subtitle">Selective Edge Chamfer &amp; Fillet for TinkerCAD Models</p>
+      </div>
+    </div>
+
+    <div class="topbar-center">
+      <div class="file-actions">
+        <label for="stl-file-input" class="btn btn-primary" title="Upload an STL file from TinkerCAD or any CAD software">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          Upload STL
+        </label>
+        <input type="file" id="stl-file-input" accept=".stl" hidden />
+
+        <div class="sample-dropdown-wrap">
+          <select id="sample-select" class="select-input" title="Load a sample TinkerCAD-style model">
+            <option value="" disabled>Sample Models...</option>
+            <option value="l-bracket" selected>Sample: L-Bracket with Hole</option>
+            <option value="stepped-block">Sample: Stepped Mounting Block</option>
+            <option value="flanged-pipe">Sample: Flanged Cylinder Boss</option>
+            <option value="t-slot">Sample: T-Channel Guide</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="divider-v"></div>
+
+      <div class="history-actions">
+        <button id="btn-undo" class="btn btn-icon" title="Undo last operation (Ctrl+Z)" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 7v6h6" />
+            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+          </svg>
+          <span>Undo</span>
+        </button>
+        <button id="btn-redo" class="btn btn-icon" title="Redo operation (Ctrl+Y)" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 7v6h-6" />
+            <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
+          </svg>
+          <span>Redo</span>
+        </button>
+        <button id="btn-reset-model" class="btn btn-ghost" title="Reset model to original uploaded STL">
+          Reset Model
+        </button>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div id="engine-status" class="engine-badge" title="Boolean CSG Engine Status">
+        <span class="status-dot loading"></span>
+        <span id="engine-status-text">Initializing CSG...</span>
+      </div>
+
+      <button type="button" id="btn-theme-toggle" class="btn btn-ghost" title="Switch between Light and Dark mode">
+        <span id="theme-icon">🌙</span>
+        <span id="theme-label">Dark</span>
+      </button>
+
+      <button type="button" id="btn-open-libraries" class="btn btn-ghost" title="View open-source libraries used in this app">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+        Libraries
+      </button>
+
+      <button id="btn-export-stl" class="btn btn-success" title="Download modified STL file ready for 3D printing or TinkerCAD">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        Export STL
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="workspace">
+    <!-- Left Sidebar: Edge Detection & Selection Controls -->
+    <aside class="sidebar sidebar-left">
+      <section class="panel-section">
+        <div class="section-header">
+          <h2>1. Edge Detection &amp; Selection</h2>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">Selection Mode</label>
+          <div class="segmented-control" role="radiogroup" aria-label="Edge selection mode">
+            <button type="button" class="seg-btn active" data-select-mode="smart" title="Selects full straight edges &amp; smooth curves (merges STL triangle splits)">
+              Smart Edge
+            </button>
+            <button type="button" class="seg-btn" data-select-mode="collinear" title="Selects only strictly straight collinear segments">
+              Straight
+            </button>
+            <button type="button" class="seg-btn" data-select-mode="loop" title="Selects entire connected edge loops/rings">
+              Loop
+            </button>
+            <button type="button" class="seg-btn" data-select-mode="segment" title="Selects individual raw STL triangle segments">
+              Segment
+            </button>
+          </div>
+          <p id="selection-mode-hint" class="control-hint">
+            Automatically heals split STL edges along flat faces and smooth curves.
+          </p>
+        </div>
+
+        <div class="control-group">
+          <div class="label-row">
+            <label for="crease-angle-slider" class="control-label">Crease Angle Threshold</label>
+            <span id="crease-angle-val" class="value-pill">25°</span>
+          </div>
+          <input type="range" id="crease-angle-slider" min="5" max="85" step="1" value="25" class="range-slider" />
+          <div class="range-sublabels">
+            <span>5° (Curved)</span>
+            <span>45° (Sharp)</span>
+            <span>85° (Steep)</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label">Filter Selectable Edges</label>
+          <div class="filter-pills">
+            <label class="filter-chip convex-chip">
+              <input type="checkbox" id="filter-convex" checked />
+              <span class="dot convex-dot"></span>
+              Convex (Outside)
+            </label>
+            <label class="filter-chip concave-chip">
+              <input type="checkbox" id="filter-concave" checked />
+              <span class="dot concave-dot"></span>
+              Concave (Inside)
+            </label>
+          </div>
+        </div>
+
+        <div class="selection-summary-box">
+          <div class="summary-stat">
+            <span class="stat-label">Selected Edges</span>
+            <span id="selected-count" class="stat-value">0</span>
+          </div>
+          <div class="summary-stat">
+            <span class="stat-label">Convex / Concave</span>
+            <span id="selected-types" class="stat-value">0 / 0</span>
+          </div>
+          <div class="summary-actions">
+            <button type="button" id="btn-clear-selection" class="btn btn-sm btn-ghost" disabled>
+              Clear Selection (Esc)
+            </button>
+            <button type="button" id="btn-invert-selection" class="btn btn-sm btn-ghost">
+              Invert
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <div class="section-header">
+          <h2>Selected Edge List</h2>
+          <span id="total-edges-badge" class="badge-subtle">0 detected</span>
+        </div>
+        <div id="selected-edges-list" class="edge-list-container">
+          <div class="empty-state">
+            Click on any highlighted edge in the 3D view to select it.<br /><br />
+            Hold <kbd>Shift</kbd> or simply click multiple edges to toggle them in your selection.
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-section model-info-section">
+        <div class="section-header">
+          <h2>Model Info</h2>
+        </div>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Dimensions (mm)</span>
+            <span id="info-dimensions" class="info-val">—</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Triangles</span>
+            <span id="info-triangles" class="info-val">—</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Status</span>
+            <span id="info-manifold" class="info-val">—</span>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Center 3D Viewport -->
+    <section class="viewport-wrapper" id="viewport-wrapper">
+      <div id="canvas-container" class="canvas-container"></div>
+
+      <!-- Drag & Drop Overlay -->
+      <div id="drop-overlay" class="drop-overlay hidden">
+        <div class="drop-card">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="1.8">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <h3>Drop your STL file here</h3>
+          <p>Supports Binary &amp; ASCII STL files from TinkerCAD, Fusion, Blender, etc.</p>
+        </div>
+      </div>
+
+      <!-- Top-Left Viewport Legend & Camera Controls -->
+      <div class="viewport-hud hud-top-left">
+        <div class="legend-card">
+          <div class="legend-item">
+            <span class="legend-line convex"></span>
+            <span>Convex Edge (Outside — Cuts corner)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-line concave"></span>
+            <span>Concave Edge (Inside — Fills corner)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-line selected"></span>
+            <span>Selected Edge (+ Live Preview)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top-Right Viewport Display Toggles -->
+      <div class="viewport-hud hud-top-right">
+        <button type="button" id="btn-fit-view" class="hud-btn" title="Fit camera to model (F)">
+          Fit View
+        </button>
+        <button type="button" id="btn-toggle-wireframe" class="hud-btn" title="Toggle STL triangle wireframe (W)">
+          Wireframe
+        </button>
+        <button type="button" id="btn-toggle-preview" class="hud-btn active" title="Toggle real-time chamfer/fillet preview mesh">
+          Live Preview
+        </button>
+        <button type="button" id="btn-toggle-edges" class="hud-btn active" title="Show/hide selectable feature edges">
+          Edges
+        </button>
+      </div>
+
+      <!-- Hover Edge Tooltip -->
+      <div id="edge-tooltip" class="edge-tooltip hidden"></div>
+
+      <!-- Bottom Viewport Help Pill -->
+      <div class="viewport-hud hud-bottom-center">
+        <span><strong>Left Click</strong> Edge: Select / Deselect</span>
+        <span class="sep">•</span>
+        <span><strong>Left Drag</strong>: Orbit</span>
+        <span class="sep">•</span>
+        <span><strong>Right Drag</strong>: Pan</span>
+        <span class="sep">•</span>
+        <span><strong>Scroll</strong>: Zoom</span>
+        <span class="sep">•</span>
+        <span><strong>Enter</strong>: Apply Operation</span>
+      </div>
+    </section>
+
+    <!-- Right Sidebar: Chamfer & Fillet Parameters -->
+    <aside class="sidebar sidebar-right">
+      <section class="panel-section">
+        <div class="section-header">
+          <h2>2. Edge Operation</h2>
+        </div>
+
+        <!-- Operation Type: Chamfer vs Fillet -->
+        <div class="control-group">
+          <label class="control-label">Operation Type</label>
+          <div class="op-type-cards">
+            <button type="button" class="op-card active" data-op-type="chamfer">
+              <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+                <path d="M5 27V15L15 5H27" stroke="#0284c7" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M5 15V5H15" stroke="#64748b" stroke-width="1.5" stroke-dasharray="2 2"/>
+              </svg>
+              <div class="op-card-text">
+                <strong>Chamfer</strong>
+                <span>Flat bevel angle</span>
+              </div>
+            </button>
+
+            <button type="button" class="op-card" data-op-type="fillet">
+              <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+                <path d="M5 27V17C5 10.3726 10.3726 5 17 5H27" stroke="#9333ea" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M5 17V5H17" stroke="#64748b" stroke-width="1.5" stroke-dasharray="2 2"/>
+              </svg>
+              <div class="op-card-text">
+                <strong>Fillet</strong>
+                <span>Rounded radius</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Distance / Size Control -->
+        <div class="control-group">
+          <div class="label-row">
+            <label for="chamfer-size-input" id="size-label" class="control-label">Chamfer Distance (mm)</label>
+            <div class="number-input-wrap">
+              <input type="number" id="chamfer-size-input" min="0.1" max="50" step="0.1" value="2.0" class="number-input" />
+              <span class="unit-tag">mm</span>
+            </div>
+          </div>
+          <input type="range" id="chamfer-size-slider" min="0.2" max="15" step="0.1" value="2.0" class="range-slider" />
+          <div class="quick-presets">
+            <button type="button" class="preset-btn" data-size="0.5">0.5mm</button>
+            <button type="button" class="preset-btn" data-size="1.0">1mm</button>
+            <button type="button" class="preset-btn active" data-size="2.0">2mm</button>
+            <button type="button" class="preset-btn" data-size="3.0">3mm</button>
+            <button type="button" class="preset-btn" data-size="5.0">5mm</button>
+          </div>
+        </div>
+
+        <!-- Chamfer-specific: Symmetric vs Asymmetric -->
+        <div id="chamfer-symmetry-group" class="control-group">
+          <label class="checkbox-row">
+            <input type="checkbox" id="asymmetric-toggle" />
+            <span>Asymmetric Chamfer (Two Distances)</span>
+          </label>
+          <div id="asymmetric-controls" class="sub-control hidden">
+            <div class="label-row">
+              <label for="chamfer-size2-input" class="control-label">Distance 2 (mm)</label>
+              <div class="number-input-wrap">
+                <input type="number" id="chamfer-size2-input" min="0.1" max="50" step="0.1" value="2.0" class="number-input" />
+                <span class="unit-tag">mm</span>
+              </div>
+            </div>
+            <input type="range" id="chamfer-size2-slider" min="0.2" max="15" step="0.1" value="2.0" class="range-slider" />
+            <button type="button" id="btn-flip-asymmetric" class="btn btn-sm btn-ghost full-width">
+              ⇄ Flip Face Direction (Swap D1 / D2)
+            </button>
+          </div>
+        </div>
+
+        <!-- Fillet-specific: Curve Smoothness Segments -->
+        <div id="fillet-segments-group" class="control-group hidden">
+          <div class="label-row">
+            <label for="fillet-segments-slider" class="control-label">Fillet Smoothness (Segments)</label>
+            <span id="fillet-segments-val" class="value-pill">12</span>
+          </div>
+          <input type="range" id="fillet-segments-slider" min="3" max="24" step="1" value="12" class="range-slider" />
+          <div class="range-sublabels">
+            <span>3 (Low-Poly)</span>
+            <span>12 (Smooth)</span>
+            <span>24 (Ultra)</span>
+          </div>
+        </div>
+
+        <!-- End Overflow / Miter Mode -->
+        <div class="control-group">
+          <label class="control-label">Corner &amp; Endpoint Handling</label>
+          <select id="endpoint-mode-select" class="select-input full-width">
+            <option value="smart" selected>Smart Miter &amp; Wall-Safe Ends (Recommended)</option>
+            <option value="extend">Through-Cut Ends (Extend past open corners)</option>
+            <option value="flush">Strict Flush Ends (Exact segment bounds)</option>
+          </select>
+        </div>
+
+        <!-- Apply Button -->
+        <div class="apply-box">
+          <button type="button" id="btn-apply-op" class="btn btn-apply" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span id="btn-apply-text">Select Edge(s) to Apply</span>
+          </button>
+          <p class="apply-hint">
+            Tip: You can apply a chamfer to one set of edges, then select other edges and apply a different size or fillet!
+          </p>
+        </div>
+      </section>
+
+      <!-- Operation History Log -->
+      <section class="panel-section">
+        <div class="section-header">
+          <h2>Applied Operations</h2>
+          <span id="op-history-count" class="badge-subtle">0 steps</span>
+        </div>
+        <div id="op-history-list" class="history-list">
+          <div class="empty-state">
+            No operations applied yet. Select edges and click <strong>Apply</strong> to modify the mesh.
+          </div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- Libraries & Open Source Credits Modal -->
+  <div id="libraries-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="libraries-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="libraries-modal-title">Libraries &amp; Architecture</h3>
+        <button type="button" id="btn-close-libraries" class="modal-close-btn" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-intro">
+          <strong>EdgeCraft STL</strong> runs 100% locally in your browser with zero server uploads. It is powered by the following open-source libraries and custom geometry algorithms:
+        </p>
+
+        <div class="lib-card">
+          <div class="lib-card-top">
+            <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer" class="lib-name">Three.js</a>
+            <div class="lib-badges">
+              <span class="lib-badge">v0.169.0</span>
+              <span class="lib-badge license">MIT License</span>
+            </div>
+          </div>
+          <p class="lib-desc">
+            Provides the WebGL 3D rendering viewport, camera <code>OrbitControls</code>, binary/ASCII <code>STLLoader</code>, and <code>STLExporter</code>.
+          </p>
+        </div>
+
+        <div class="lib-card">
+          <div class="lib-card-top">
+            <a href="https://github.com/elalish/manifold" target="_blank" rel="noopener noreferrer" class="lib-name">Manifold-3D (WebAssembly)</a>
+            <div class="lib-badges">
+              <span class="lib-badge">v3.0.0</span>
+              <span class="lib-badge license">Apache-2.0 License</span>
+            </div>
+          </div>
+          <p class="lib-desc">
+            High-performance WebAssembly solid modeling kernel by Emmett Lalish. Guarantees watertight manifold 3D boolean CSG subtraction (for convex outside edges) and boolean union (for concave inside corners).
+          </p>
+        </div>
+
+        <div class="lib-card">
+          <div class="lib-card-top">
+            <span class="lib-name">EdgeCraft Topology &amp; Rational Bézier Engine</span>
+            <div class="lib-badges">
+              <span class="lib-badge">Built-in ES Module</span>
+              <span class="lib-badge license">First-Party</span>
+            </div>
+          </div>
+          <p class="lib-desc">
+            Custom client-side half-edge mesh analyzer that welds raw STL triangle soup, classifies convex vs. concave dihedral creases, heals split STL face edges into continuous loops, and sweeps mitered chamfer &amp; exact rational quadratic Bézier circular fillet volumes.
+          </p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btn-done-libraries" class="btn btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Inline Module Script so double-clicking index.html (file://) works without CORS blocks -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+    import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+
+    // =========================================================================
+    // 1. TOPOLOGY & FEATURE EDGE DETECTION
+    // =========================================================================
+    function analyzeMeshTopology(geometry, creaseAngleDeg = 25) {
+      const posAttr = geometry.getAttribute('position');
+      if (!posAttr) {
+        throw new Error('Geometry is missing position attribute');
+      }
+
+      const tolerance = 1e-4;
+      const invTol = 1 / tolerance;
+
+      const vertices = [];
+      const vertMap = new Map();
+      const rawIndexCount = geometry.index ? geometry.index.count : posAttr.count;
+
+      const getVertexIndex = (x, y, z) => {
+        const kx = Math.round(x * invTol);
+        const ky = Math.round(y * invTol);
+        const kz = Math.round(z * invTol);
+        const key = `${kx}_${ky}_${kz}`;
+        let idx = vertMap.get(key);
+        if (idx === undefined) {
+          idx = vertices.length;
+          vertices.push(new THREE.Vector3(x, y, z));
+          vertMap.set(key, idx);
+        }
+        return idx;
+      };
+
+      const faces = [];
+      const vA = new THREE.Vector3();
+      const vB = new THREE.Vector3();
+      const vC = new THREE.Vector3();
+      const ab = new THREE.Vector3();
+      const ac = new THREE.Vector3();
+      const cross = new THREE.Vector3();
+
+      for (let i = 0; i < rawIndexCount; i += 3) {
+        const i0 = geometry.index ? geometry.index.getX(i) : i;
+        const i1 = geometry.index ? geometry.index.getX(i + 1) : i + 1;
+        const i2 = geometry.index ? geometry.index.getX(i + 2) : i + 2;
+
+        const a = getVertexIndex(posAttr.getX(i0), posAttr.getY(i0), posAttr.getZ(i0));
+        const b = getVertexIndex(posAttr.getX(i1), posAttr.getY(i1), posAttr.getZ(i1));
+        const c = getVertexIndex(posAttr.getX(i2), posAttr.getY(i2), posAttr.getZ(i2));
+
+        if (a === b || b === c || c === a) continue;
+
+        vA.copy(vertices[a]);
+        vB.copy(vertices[b]);
+        vC.copy(vertices[c]);
+        ab.subVectors(vB, vA);
+        ac.subVectors(vC, vA);
+        cross.crossVectors(ab, ac);
+        const len = cross.length();
+        if (len < 1e-9) continue;
+
+        faces.push({
+          index: faces.length,
+          a,
+          b,
+          c,
+          normal: cross.clone().divideScalar(len),
+          area: len * 0.5,
+        });
+      }
+
+      const edgeMap = new Map();
+      const addHalfEdge = (u, v, faceIdx) => {
+        const min = u < v ? u : v;
+        const max = u < v ? v : u;
+        const key = `${min}_${max}`;
+        let entry = edgeMap.get(key);
+        if (!entry) {
+          entry = { u: min, v: max, halfEdges: [] };
+          edgeMap.set(key, entry);
+        }
+        entry.halfEdges.push({ from: u, to: v, faceIdx });
+      };
+
+      for (let fIdx = 0; fIdx < faces.length; fIdx++) {
+        const f = faces[fIdx];
+        addHalfEdge(f.a, f.b, fIdx);
+        addHalfEdge(f.b, f.c, fIdx);
+        addHalfEdge(f.c, f.a, fIdx);
+      }
+
+      const cosThreshold = Math.cos(THREE.MathUtils.degToRad(creaseAngleDeg));
+      const segments = [];
+      let boundaryEdgeCount = 0;
+      let nonManifoldEdgeCount = 0;
+
+      for (const entry of edgeMap.values()) {
+        if (entry.halfEdges.length === 1) {
+          boundaryEdgeCount++;
+          continue;
+        }
+        if (entry.halfEdges.length !== 2) {
+          nonManifoldEdgeCount++;
+        }
+
+        const he1 = entry.halfEdges[0];
+        const he2 =
+          entry.halfEdges.find((h, idx) => idx > 0 && h.from === he1.to && h.to === he1.from) ||
+          entry.halfEdges[1];
+
+        const f1 = faces[he1.faceIdx];
+        const f2 = faces[he2.faceIdx];
+        const n1 = f1.normal;
+        const n2 = f2.normal;
+
+        const dot = THREE.MathUtils.clamp(n1.dot(n2), -1, 1);
+        if (dot > cosThreshold) continue;
+
+        const vaIdx = he1.from;
+        const vbIdx = he1.to;
+        const pA = vertices[vaIdx];
+        const pB = vertices[vbIdx];
+        const tangent = new THREE.Vector3().subVectors(pB, pA);
+        const length = tangent.length();
+        if (length < 1e-6) continue;
+        tangent.divideScalar(length);
+
+        const u1 = new THREE.Vector3().crossVectors(n1, tangent).normalize();
+        const he2Sign = he2.from === vbIdx ? -1 : 1;
+        const u2 = new THREE.Vector3().crossVectors(n2, tangent).multiplyScalar(he2Sign).normalize();
+
+        const convexityDot = -u2.dot(n1);
+        const type = convexityDot >= 0 ? 'convex' : 'concave';
+        const dihedralDeg = THREE.MathUtils.radToDeg(Math.acos(dot));
+        const faceAngleRad = Math.acos(THREE.MathUtils.clamp(u1.dot(u2), -1, 1));
+
+        segments.push({
+          id: segments.length,
+          vaIdx,
+          vbIdx,
+          pA: pA.clone(),
+          pB: pB.clone(),
+          midpoint: new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5),
+          tangent,
+          length,
+          f1Idx: f1.index,
+          f2Idx: f2.index,
+          n1: n1.clone(),
+          n2: n2.clone(),
+          u1,
+          u2,
+          type,
+          dihedralDeg,
+          faceAngleRad,
+          collinearGroupId: -1,
+          smartGroupId: -1,
+          loopGroupId: -1,
+        });
+      }
+
+      const vertToSegments = new Map();
+      const registerVertSeg = (vIdx, segId) => {
+        let list = vertToSegments.get(vIdx);
+        if (!list) {
+          list = [];
+          vertToSegments.set(vIdx, list);
+        }
+        list.push(segId);
+      };
+
+      for (const seg of segments) {
+        registerVertSeg(seg.vaIdx, seg.id);
+        registerVertSeg(seg.vbIdx, seg.id);
+      }
+
+      const getDirFromVertex = (seg, vIdx) =>
+        seg.vaIdx === vIdx ? seg.tangent.clone() : seg.tangent.clone().negate();
+
+      const normalsMatch = (segA, segB, cosMin = Math.cos(THREE.MathUtils.degToRad(12))) => {
+        const direct = segA.n1.dot(segB.n1) >= cosMin && segA.n2.dot(segB.n2) >= cosMin;
+        const swapped = segA.n1.dot(segB.n2) >= cosMin && segA.n2.dot(segB.n1) >= cosMin;
+        return direct || swapped;
+      };
+
+      const collinearCos = Math.cos(THREE.MathUtils.degToRad(5));
+      const collinearGroups = buildEdgeChains(segments, vertToSegments, (segA, segB, vIdx) => {
+        if (segA.type !== segB.type) return -1;
+        const dA = getDirFromVertex(segA, vIdx);
+        const dB = getDirFromVertex(segB, vIdx);
+        const alignment = -dA.dot(dB);
+        if (alignment < collinearCos) return -1;
+        if (!normalsMatch(segA, segB, Math.cos(THREE.MathUtils.degToRad(8)))) return -1;
+        return alignment;
+      });
+      collinearGroups.forEach((g, idx) => {
+        g.segmentIds.forEach((sId) => {
+          segments[sId].collinearGroupId = idx;
+        });
+      });
+
+      const smartTurnCos = Math.cos(THREE.MathUtils.degToRad(34));
+      const smartGroups = buildEdgeChains(segments, vertToSegments, (segA, segB, vIdx) => {
+        if (segA.type !== segB.type) return -1;
+        const dA = getDirFromVertex(segA, vIdx);
+        const dB = getDirFromVertex(segB, vIdx);
+        const alignment = -dA.dot(dB);
+        if (alignment < smartTurnCos) return -1;
+        if (Math.abs(segA.dihedralDeg - segB.dihedralDeg) > 18) return -1;
+        return alignment;
+      });
+      smartGroups.forEach((g, idx) => {
+        g.segmentIds.forEach((sId) => {
+          segments[sId].smartGroupId = idx;
+        });
+      });
+
+      const loopGroups = buildLoopGroups(segments, vertToSegments);
+      loopGroups.forEach((g, idx) => {
+        g.segmentIds.forEach((sId) => {
+          segments[sId].loopGroupId = idx;
+        });
+      });
+
+      return {
+        vertices,
+        faces,
+        segments,
+        vertToSegments,
+        collinearGroups,
+        smartGroups,
+        loopGroups,
+        isWatertight: boundaryEdgeCount === 0 && nonManifoldEdgeCount === 0,
+        boundaryEdgeCount,
+        nonManifoldEdgeCount,
+      };
+    }
+
+    function buildEdgeChains(segments, vertToSegments, scoreFn) {
+      const visited = new Uint8Array(segments.length);
+      const groups = [];
+      const nextAtVertex = new Map();
+
+      for (const [vIdx, incidentIds] of vertToSegments.entries()) {
+        if (incidentIds.length < 2) continue;
+        const pairs = [];
+        for (let i = 0; i < incidentIds.length; i++) {
+          for (let j = i + 1; j < incidentIds.length; j++) {
+            const sA = segments[incidentIds[i]];
+            const sB = segments[incidentIds[j]];
+            const score = scoreFn(sA, sB, vIdx);
+            if (score > 0) pairs.push({ a: sA.id, b: sB.id, score });
+          }
+        }
+        pairs.sort((x, y) => y.score - x.score);
+        const usedInVert = new Set();
+        for (const p of pairs) {
+          if (!usedInVert.has(p.a) && !usedInVert.has(p.b)) {
+            usedInVert.add(p.a);
+            usedInVert.add(p.b);
+            nextAtVertex.set(`${p.a}_${vIdx}`, p.b);
+            nextAtVertex.set(`${p.b}_${vIdx}`, p.a);
+          }
+        }
+      }
+
+      for (let i = 0; i < segments.length; i++) {
+        if (visited[i]) continue;
+        visited[i] = 1;
+        const chain = [i];
+
+        let currId = i;
+        let currVert = segments[currId].vbIdx;
+        while (true) {
+          const nextId = nextAtVertex.get(`${currId}_${currVert}`);
+          if (nextId === undefined || visited[nextId]) break;
+          visited[nextId] = 1;
+          chain.push(nextId);
+          const nextSeg = segments[nextId];
+          currVert = nextSeg.vaIdx === currVert ? nextSeg.vbIdx : nextSeg.vaIdx;
+          currId = nextId;
+        }
+
+        currId = i;
+        currVert = segments[currId].vaIdx;
+        while (true) {
+          const prevId = nextAtVertex.get(`${currId}_${currVert}`);
+          if (prevId === undefined || visited[prevId]) break;
+          visited[prevId] = 1;
+          chain.unshift(prevId);
+          const prevSeg = segments[prevId];
+          currVert = prevSeg.vaIdx === currVert ? prevSeg.vbIdx : prevSeg.vaIdx;
+          currId = prevId;
+        }
+
+        let totalLen = 0;
+        for (const sId of chain) totalLen += segments[sId].length;
+
+        groups.push({
+          id: groups.length,
+          type: segments[i].type,
+          segmentIds: chain,
+          totalLength: totalLen,
+        });
+      }
+
+      return groups;
+    }
+
+    function buildLoopGroups(segments, vertToSegments) {
+      const visited = new Uint8Array(segments.length);
+      const groups = [];
+
+      for (let i = 0; i < segments.length; i++) {
+        if (visited[i]) continue;
+        const seed = segments[i];
+        visited[i] = 1;
+        const comp = [i];
+        const queue = [i];
+
+        while (queue.length > 0) {
+          const currId = queue.shift();
+          const curr = segments[currId];
+          const verts = [curr.vaIdx, curr.vbIdx];
+          for (const vIdx of verts) {
+            const neighbors = vertToSegments.get(vIdx) || [];
+            for (const nId of neighbors) {
+              if (visited[nId]) continue;
+              const cand = segments[nId];
+              if (cand.type !== seed.type) continue;
+              const sharesFacePlane =
+                curr.n1.dot(cand.n1) > 0.85 ||
+                curr.n1.dot(cand.n2) > 0.85 ||
+                curr.n2.dot(cand.n1) > 0.85 ||
+                curr.n2.dot(cand.n2) > 0.85;
+              if (sharesFacePlane) {
+                visited[nId] = 1;
+                comp.push(nId);
+                queue.push(nId);
+              }
+            }
+          }
+        }
+
+        let totalLen = 0;
+        for (const sId of comp) totalLen += segments[sId].length;
+
+        groups.push({
+          id: groups.length,
+          type: seed.type,
+          segmentIds: comp,
+          totalLength: totalLen,
+        });
+      }
+
+      return groups;
+    }
+
+    function getGroupSegmentIds(topology, segId, selectionMode = 'smart') {
+      const seg = topology.segments[segId];
+      if (!seg) return [];
+      if (selectionMode === 'segment') return [segId];
+      if (selectionMode === 'collinear') {
+        const g = topology.collinearGroups[seg.collinearGroupId];
+        return g ? g.segmentIds : [segId];
+      }
+      if (selectionMode === 'loop') {
+        const g = topology.loopGroups[seg.loopGroupId];
+        return g ? g.segmentIds : [segId];
+      }
+      const g = topology.smartGroups[seg.smartGroupId];
+      return g ? g.segmentIds : [segId];
+    }
+
+    // =========================================================================
+    // 2. CHAMFER & FILLET CSG ENGINE
+    // =========================================================================
+    let manifoldModule = null;
+    let manifoldInitPromise = null;
+
+    async function initCSGEngine() {
+      if (manifoldModule) return manifoldModule;
+      if (manifoldInitPromise) return manifoldInitPromise;
+
+      manifoldInitPromise = (async () => {
+        try {
+          const modFactory = (await import('manifold-3d')).default;
+          const wasm = await modFactory({
+            locateFile: () => 'https://cdn.jsdelivr.net/npm/manifold-3d@3.0.0/manifold.wasm',
+          });
+          if (typeof wasm.setup === 'function') {
+            wasm.setup();
+          }
+          manifoldModule = wasm;
+          return wasm;
+        } catch (err) {
+          console.warn('Manifold WASM failed to load:', err);
+          return null;
+        }
+      })();
+
+      return manifoldInitPromise;
+    }
+
+    function buildCrossSectionFrame(origin, n1, n2, u1, u2, miterScale, params, segType) {
+      const {
+        opType = 'chamfer',
+        size1 = 2.0,
+        size2 = 2.0,
+        asymmetric = false,
+        flipAsymmetric = false,
+        filletSegments = 12,
+      } = params;
+
+      let d1 = size1;
+      let d2 = asymmetric ? size2 : size1;
+      if (asymmetric && flipAsymmetric) {
+        const tmp = d1;
+        d1 = d2;
+        d2 = tmp;
+      }
+
+      d1 *= miterScale;
+      d2 *= miterScale;
+
+      const q1 = origin.clone().addScaledVector(u1, d1);
+      const q2 = origin.clone().addScaledVector(u2, d2);
+
+      const surfacePts = [];
+      if (opType === 'chamfer') {
+        surfacePts.push(q1.clone(), q2.clone());
+      } else {
+        const cosAlpha = THREE.MathUtils.clamp(u1.dot(u2), -0.99, 0.99);
+        const alpha = Math.acos(cosAlpha);
+        const weight = Math.max(0.15, Math.sin(alpha * 0.5));
+        const steps = Math.max(3, Math.min(32, Math.round(filletSegments)));
+
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const omt = 1 - t;
+          const b0 = omt * omt;
+          const b1 = 2 * weight * t * omt;
+          const b2 = t * t;
+          const denom = b0 + b1 + b2;
+
+          const pt = new THREE.Vector3()
+            .addScaledVector(q1, b0 / denom)
+            .addScaledVector(origin, b1 / denom)
+            .addScaledVector(q2, b2 / denom);
+          surfacePts.push(pt);
+        }
+      }
+
+      const maxD = Math.max(d1, d2);
+      const ringPts = [...surfacePts];
+
+      if (segType === 'convex') {
+        const outMargin = Math.max(0.4, maxD * 0.85);
+        const o2 = q2
+          .clone()
+          .addScaledVector(n2, outMargin)
+          .addScaledVector(u2, maxD * 0.08);
+        const nSum = new THREE.Vector3().addVectors(n1, n2);
+        if (nSum.lengthSq() < 1e-4) nSum.copy(n1);
+        else nSum.normalize();
+        const oMid = origin.clone().addScaledVector(nSum, outMargin * 1.45);
+        const o1 = q1
+          .clone()
+          .addScaledVector(n1, outMargin)
+          .addScaledVector(u1, maxD * 0.08);
+        ringPts.push(o2, oMid, o1);
+      } else {
+        const embed = Math.min(Math.max(0.08, maxD * 0.28), maxD * 0.6);
+        const b2 = q2
+          .clone()
+          .addScaledVector(n2, -embed)
+          .addScaledVector(u2, -maxD * 0.04);
+        const nSum = new THREE.Vector3().addVectors(n1, n2);
+        if (nSum.lengthSq() < 1e-4) nSum.copy(n1);
+        else nSum.normalize();
+        const bMid = origin.clone().addScaledVector(nSum, -embed * 1.35);
+        const b1 = q1
+          .clone()
+          .addScaledVector(n1, -embed)
+          .addScaledVector(u1, -maxD * 0.04);
+        ringPts.push(b2, bMid, b1);
+      }
+
+      return { surfacePts, ringPts };
+    }
+
+    function buildSelectedSmoothPaths(topology, selectedIds) {
+      const selectedSet = new Set(selectedIds);
+      const visited = new Set();
+      const paths = [];
+
+      const vertMap = new Map();
+      for (const sId of selectedSet) {
+        const seg = topology.segments[sId];
+        if (!seg) continue;
+        if (!vertMap.has(seg.vaIdx)) vertMap.set(seg.vaIdx, []);
+        if (!vertMap.has(seg.vbIdx)) vertMap.set(seg.vbIdx, []);
+        vertMap.get(seg.vaIdx).push(sId);
+        vertMap.get(seg.vbIdx).push(sId);
+      }
+
+      const maxTurnCos = Math.cos(THREE.MathUtils.degToRad(40));
+
+      const getContinuation = (currSegId, vIdx) => {
+        const currSeg = topology.segments[currSegId];
+        const candidates = vertMap.get(vIdx) || [];
+        const dirCurr =
+          currSeg.vaIdx === vIdx ? currSeg.tangent.clone() : currSeg.tangent.clone().negate();
+
+        let bestId = null;
+        let bestAlign = -1;
+        for (const cId of candidates) {
+          if (cId === currSegId || visited.has(cId)) continue;
+          const cand = topology.segments[cId];
+          if (cand.type !== currSeg.type) continue;
+          const dirCand =
+            cand.vaIdx === vIdx ? cand.tangent.clone() : cand.tangent.clone().negate();
+          const align = -dirCurr.dot(dirCand);
+          if (align >= maxTurnCos && align > bestAlign) {
+            bestAlign = align;
+            bestId = cId;
+          }
+        }
+        return bestId;
+      };
+
+      for (const seedId of selectedSet) {
+        if (visited.has(seedId)) continue;
+        const seedSeg = topology.segments[seedId];
+        if (!seedSeg) continue;
+        visited.add(seedId);
+
+        const chain = [
+          {
+            seg: seedSeg,
+            fromVert: seedSeg.vaIdx,
+            toVert: seedSeg.vbIdx,
+            reversed: false,
+          },
+        ];
+
+        let currSegId = seedId;
+        let currVert = seedSeg.vbIdx;
+        while (true) {
+          const nextId = getContinuation(currSegId, currVert);
+          if (nextId === null) break;
+          visited.add(nextId);
+          const nextSeg = topology.segments[nextId];
+          const reversed = nextSeg.vaIdx !== currVert;
+          const nextTo = reversed ? nextSeg.vaIdx : nextSeg.vbIdx;
+          chain.push({
+            seg: nextSeg,
+            fromVert: currVert,
+            toVert: nextTo,
+            reversed,
+          });
+          currVert = nextTo;
+          currSegId = nextId;
+        }
+
+        currSegId = seedId;
+        currVert = seedSeg.vaIdx;
+        while (true) {
+          const prevId = getContinuation(currSegId, currVert);
+          if (prevId === null) break;
+          visited.add(prevId);
+          const prevSeg = topology.segments[prevId];
+          const reversed = prevSeg.vbIdx !== currVert;
+          const prevFrom = reversed ? prevSeg.vbIdx : prevSeg.vaIdx;
+          chain.unshift({
+            seg: prevSeg,
+            fromVert: prevFrom,
+            toVert: currVert,
+            reversed,
+          });
+          currVert = prevFrom;
+          currSegId = prevId;
+        }
+
+        const first = chain[0];
+        const last = chain[chain.length - 1];
+        let isClosed = false;
+        if (chain.length >= 3 && first.fromVert === last.toVert) {
+          const dFirst = first.reversed
+            ? first.seg.tangent.clone().negate()
+            : first.seg.tangent.clone();
+          const dLast = last.reversed
+            ? last.seg.tangent.clone().negate()
+            : last.seg.tangent.clone();
+          if (dFirst.dot(dLast) >= maxTurnCos) {
+            isClosed = true;
+          }
+        }
+
+        paths.push({
+          type: seedSeg.type,
+          items: chain,
+          isClosed,
+        });
+      }
+
+      return paths;
+    }
+
+    function computeEndpointExtension(topology, vIdx, outDir, seg, maxD, endpointMode) {
+      if (endpointMode === 'flush') return 0;
+      if (endpointMode === 'extend') {
+        return seg.type === 'convex' ? Math.max(0.15, maxD * 0.35) : 0.02;
+      }
+
+      const incidentSegIds = topology.vertToSegments.get(vIdx) || [];
+      for (const otherId of incidentSegIds) {
+        if (otherId === seg.id) continue;
+        const other = topology.segments[otherId];
+        if (other.type === 'concave') return 0.002;
+      }
+
+      return seg.type === 'convex' ? 0.06 : 0.01;
+    }
+
+    function buildOperationMeshes(topology, selectedIds, params) {
+      const paths = buildSelectedSmoothPaths(topology, selectedIds);
+
+      const previewPositions = [];
+      const previewNormals = [];
+      const convexSolids = [];
+      const concaveSolids = [];
+
+      const maxD = Math.max(params.size1 || 2, params.asymmetric ? params.size2 || 2 : params.size1 || 2);
+
+      for (const path of paths) {
+        const { items, isClosed, type } = path;
+        const numSegs = items.length;
+
+        const segFrames = items.map((item) => {
+          const { seg, reversed } = item;
+          const tangent = reversed ? seg.tangent.clone().negate() : seg.tangent.clone();
+          const n1 = reversed ? seg.n2.clone() : seg.n1.clone();
+          const n2 = reversed ? seg.n1.clone() : seg.n2.clone();
+          const u1 = reversed ? seg.u2.clone() : seg.u1.clone();
+          const u2 = reversed ? seg.u1.clone() : seg.u2.clone();
+          return { tangent, n1, n2, u1, u2, seg };
+        });
+
+        for (let i = 1; i < numSegs; i++) {
+          const prev = segFrames[i - 1];
+          const curr = segFrames[i];
+          const directScore =
+            prev.u1.dot(curr.u1) + prev.u2.dot(curr.u2) + prev.n1.dot(curr.n1) + prev.n2.dot(curr.n2);
+          const swappedScore =
+            prev.u1.dot(curr.u2) + prev.u2.dot(curr.u1) + prev.n1.dot(curr.n2) + prev.n2.dot(curr.n1);
+          if (directScore < swappedScore) {
+            const tmpN = curr.n1;
+            curr.n1 = curr.n2;
+            curr.n2 = tmpN;
+            const tmpU = curr.u1;
+            curr.u1 = curr.u2;
+            curr.u2 = tmpU;
+          }
+        }
+
+        const stationCount = isClosed ? numSegs : numSegs + 1;
+        const rings = [];
+        const surfaceStrips = [];
+
+        for (let k = 0; k < stationCount; k++) {
+          let vIdx;
+          let origin;
+          let n1, n2, u1, u2;
+          let miterScale = 1.0;
+
+          if (isClosed) {
+            const prevF = segFrames[(k - 1 + numSegs) % numSegs];
+            const currF = segFrames[k];
+            vIdx = items[k].fromVert;
+            origin = topology.vertices[vIdx].clone();
+
+            n1 = new THREE.Vector3().addVectors(prevF.n1, currF.n1).normalize();
+            n2 = new THREE.Vector3().addVectors(prevF.n2, currF.n2).normalize();
+            u1 = new THREE.Vector3().addVectors(prevF.u1, currF.u1);
+            u2 = new THREE.Vector3().addVectors(prevF.u2, currF.u2);
+            const len1 = u1.length();
+            const len2 = u2.length();
+            if (len1 > 1e-4) u1.divideScalar(len1);
+            if (len2 > 1e-4) u2.divideScalar(len2);
+
+            const cosHalfTurn = Math.max(0.65, 0.5 * (len1 + len2) * 0.5);
+            miterScale = Math.min(1.45, 1 / cosHalfTurn);
+          } else if (k === 0) {
+            const f = segFrames[0];
+            vIdx = items[0].fromVert;
+            const outDir = f.tangent.clone().negate();
+            const ext = computeEndpointExtension(
+              topology,
+              vIdx,
+              outDir,
+              f.seg,
+              maxD,
+              params.endpointMode || 'smart'
+            );
+            origin = topology.vertices[vIdx].clone().addScaledVector(outDir, ext);
+            n1 = f.n1;
+            n2 = f.n2;
+            u1 = f.u1;
+            u2 = f.u2;
+          } else if (k === numSegs) {
+            const f = segFrames[numSegs - 1];
+            vIdx = items[numSegs - 1].toVert;
+            const outDir = f.tangent.clone();
+            const ext = computeEndpointExtension(
+              topology,
+              vIdx,
+              outDir,
+              f.seg,
+              maxD,
+              params.endpointMode || 'smart'
+            );
+            origin = topology.vertices[vIdx].clone().addScaledVector(outDir, ext);
+            n1 = f.n1;
+            n2 = f.n2;
+            u1 = f.u1;
+            u2 = f.u2;
+          } else {
+            const prevF = segFrames[k - 1];
+            const currF = segFrames[k];
+            vIdx = items[k].fromVert;
+            origin = topology.vertices[vIdx].clone();
+
+            n1 = new THREE.Vector3().addVectors(prevF.n1, currF.n1).normalize();
+            n2 = new THREE.Vector3().addVectors(prevF.n2, currF.n2).normalize();
+            u1 = new THREE.Vector3().addVectors(prevF.u1, currF.u1);
+            u2 = new THREE.Vector3().addVectors(prevF.u2, currF.u2);
+            const len1 = u1.length();
+            const len2 = u2.length();
+            if (len1 > 1e-4) u1.divideScalar(len1);
+            if (len2 > 1e-4) u2.divideScalar(len2);
+
+            const cosHalf = Math.max(0.65, Math.sqrt(0.5 * (1 + prevF.tangent.dot(currF.tangent))));
+            miterScale = Math.min(1.45, 1 / cosHalf);
+          }
+
+          const frame = buildCrossSectionFrame(origin, n1, n2, u1, u2, miterScale, params, type);
+          rings.push(frame.ringPts);
+          surfaceStrips.push(frame.surfacePts);
+        }
+
+        for (let s = 0; s < numSegs; s++) {
+          const stripA = surfaceStrips[s];
+          const stripB = surfaceStrips[(s + 1) % stationCount];
+          for (let j = 0; j < stripA.length - 1; j++) {
+            const p00 = stripA[j];
+            const p01 = stripA[j + 1];
+            const p10 = stripB[j];
+            const p11 = stripB[j + 1];
+
+            addTriangleToPreview(previewPositions, previewNormals, p00, p10, p11);
+            addTriangleToPreview(previewPositions, previewNormals, p00, p11, p01);
+          }
+        }
+
+        const solid = buildWatertightSweepSolid(rings, isClosed);
+        if (solid) {
+          if (type === 'convex') convexSolids.push(solid);
+          else concaveSolids.push(solid);
+        }
+      }
+
+      const previewGeometry = new THREE.BufferGeometry();
+      previewGeometry.setAttribute('position', new THREE.Float32BufferAttribute(previewPositions, 3));
+      previewGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(previewNormals, 3));
+
+      return { previewGeometry, convexSolids, concaveSolids };
+    }
+
+    function addTriangleToPreview(positions, normals, a, b, c) {
+      const ab = new THREE.Vector3().subVectors(b, a);
+      const ac = new THREE.Vector3().subVectors(c, a);
+      const n = new THREE.Vector3().crossVectors(ab, ac).normalize();
+
+      positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      normals.push(n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z);
+    }
+
+    function buildWatertightSweepSolid(rings, isClosed) {
+      if (!rings || rings.length < 2) return null;
+      const ringSize = rings[0].length;
+      const numRings = rings.length;
+
+      const verts = [];
+      for (let r = 0; r < numRings; r++) {
+        for (let j = 0; j < ringSize; j++) {
+          const p = rings[r][j];
+          verts.push(p.x, p.y, p.z);
+        }
+      }
+
+      const tris = [];
+      const segCount = isClosed ? numRings : numRings - 1;
+
+      for (let r = 0; r < segCount; r++) {
+        const nextR = (r + 1) % numRings;
+        const baseA = r * ringSize;
+        const baseB = nextR * ringSize;
+
+        for (let j = 0; j < ringSize; j++) {
+          const nextJ = (j + 1) % ringSize;
+          const i00 = baseA + j;
+          const i01 = baseA + nextJ;
+          const i10 = baseB + j;
+          const i11 = baseB + nextJ;
+
+          tris.push(i00, i10, i11);
+          tris.push(i00, i11, i01);
+        }
+      }
+
+      if (!isClosed) {
+        const pivot = ringSize - 2;
+        for (let k = 1; k <= ringSize - 2; k++) {
+          const v1 = (pivot + k) % ringSize;
+          const v2 = (pivot + k + 1) % ringSize;
+          tris.push(pivot, v1, v2);
+        }
+
+        const baseEnd = (numRings - 1) * ringSize;
+        for (let k = 1; k <= ringSize - 2; k++) {
+          const v1 = (pivot + k) % ringSize;
+          const v2 = (pivot + k + 1) % ringSize;
+          tris.push(baseEnd + pivot, baseEnd + v2, baseEnd + v1);
+        }
+      }
+
+      let signedVol6 = 0;
+      for (let i = 0; i < tris.length; i += 3) {
+        const i0 = tris[i] * 3;
+        const i1 = tris[i + 1] * 3;
+        const i2 = tris[i + 2] * 3;
+        const ax = verts[i0], ay = verts[i0 + 1], az = verts[i0 + 2];
+        const bx = verts[i1], by = verts[i1 + 1], bz = verts[i1 + 2];
+        const cx = verts[i2], cy = verts[i2 + 1], cz = verts[i2 + 2];
+        signedVol6 += ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx);
+      }
+
+      if (signedVol6 < 0) {
+        for (let i = 0; i < tris.length; i += 3) {
+          const tmp = tris[i + 1];
+          tris[i + 1] = tris[i + 2];
+          tris[i + 2] = tmp;
+        }
+      }
+
+      return {
+        vertProperties: new Float32Array(verts),
+        triVerts: new Uint32Array(tris),
+      };
+    }
+
+    function topologyToIndexedData(topology) {
+      const numVerts = topology.vertices.length;
+      const vertProperties = new Float32Array(numVerts * 3);
+      for (let i = 0; i < numVerts; i++) {
+        const v = topology.vertices[i];
+        vertProperties[i * 3] = v.x;
+        vertProperties[i * 3 + 1] = v.y;
+        vertProperties[i * 3 + 2] = v.z;
+      }
+
+      const numFaces = topology.faces.length;
+      const triVerts = new Uint32Array(numFaces * 3);
+      for (let i = 0; i < numFaces; i++) {
+        const f = topology.faces[i];
+        triVerts[i * 3] = f.a;
+        triVerts[i * 3 + 1] = f.b;
+        triVerts[i * 3 + 2] = f.c;
+      }
+
+      return { vertProperties, triVerts };
+    }
+
+    async function applyEdgeOperationsCSG(topology, selectedIds, params) {
+      const { convexSolids, concaveSolids } = buildOperationMeshes(topology, selectedIds, params);
+      if (convexSolids.length === 0 && concaveSolids.length === 0) {
+        throw new Error('No valid edge operations to apply.');
+      }
+
+      const wasm = await initCSGEngine();
+      if (!wasm) {
+        throw new Error('CSG Boolean Engine is still loading or unavailable.');
+      }
+
+      const { Manifold, Mesh } = wasm;
+      const baseData = topologyToIndexedData(topology);
+
+      const toDelete = [];
+      try {
+        const baseMesh = new Mesh({
+          numProp: 3,
+          vertProperties: baseData.vertProperties,
+          triVerts: baseData.triVerts,
+        });
+        let currentManifold = new Manifold(baseMesh);
+        toDelete.push(currentManifold);
+
+        for (const cutter of convexSolids) {
+          const mMesh = new Mesh({
+            numProp: 3,
+            vertProperties: cutter.vertProperties,
+            triVerts: cutter.triVerts,
+          });
+          const cutterManifold = new Manifold(mMesh);
+          toDelete.push(cutterManifold);
+
+          const nextManifold = currentManifold.subtract(cutterManifold);
+          toDelete.push(nextManifold);
+          currentManifold = nextManifold;
+        }
+
+        for (const filler of concaveSolids) {
+          const mMesh = new Mesh({
+            numProp: 3,
+            vertProperties: filler.vertProperties,
+            triVerts: filler.triVerts,
+          });
+          const fillerManifold = new Manifold(mMesh);
+          toDelete.push(fillerManifold);
+
+          const nextManifold = currentManifold.add(fillerManifold);
+          toDelete.push(nextManifold);
+          currentManifold = nextManifold;
+        }
+
+        const outMesh = currentManifold.getMesh();
+        const outVerts = outMesh.vertProperties;
+        const outTris = outMesh.triVerts;
+        const numProp = outMesh.numProp || 3;
+
+        const triCount = outTris.length / 3;
+        const positions = new Float32Array(triCount * 9);
+        const normals = new Float32Array(triCount * 9);
+
+        const vA = new THREE.Vector3();
+        const vB = new THREE.Vector3();
+        const vC = new THREE.Vector3();
+        const ab = new THREE.Vector3();
+        const ac = new THREE.Vector3();
+        const norm = new THREE.Vector3();
+
+        for (let t = 0; t < triCount; t++) {
+          const i0 = outTris[t * 3] * numProp;
+          const i1 = outTris[t * 3 + 1] * numProp;
+          const i2 = outTris[t * 3 + 2] * numProp;
+
+          vA.set(outVerts[i0], outVerts[i0 + 1], outVerts[i0 + 2]);
+          vB.set(outVerts[i1], outVerts[i1 + 1], outVerts[i1 + 2]);
+          vC.set(outVerts[i2], outVerts[i2 + 1], outVerts[i2 + 2]);
+
+          ab.subVectors(vB, vA);
+          ac.subVectors(vC, vA);
+          norm.crossVectors(ab, ac).normalize();
+
+          const base = t * 9;
+          positions[base] = vA.x;
+          positions[base + 1] = vA.y;
+          positions[base + 2] = vA.z;
+          positions[base + 3] = vB.x;
+          positions[base + 4] = vB.y;
+          positions[base + 5] = vB.z;
+          positions[base + 6] = vC.x;
+          positions[base + 7] = vC.y;
+          positions[base + 8] = vC.z;
+
+          normals[base] = norm.x;
+          normals[base + 1] = norm.y;
+          normals[base + 2] = norm.z;
+          normals[base + 3] = norm.x;
+          normals[base + 4] = norm.y;
+          normals[base + 5] = norm.z;
+          normals[base + 6] = norm.x;
+          normals[base + 7] = norm.y;
+          normals[base + 8] = norm.z;
+        }
+
+        const resultGeo = new THREE.BufferGeometry();
+        resultGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        resultGeo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+        return resultGeo;
+      } finally {
+        for (const m of toDelete) {
+          try {
+            if (m && typeof m.delete === 'function') m.delete();
+          } catch (_) {}
+        }
+      }
+    }
+
+    // =========================================================================
+    // 3. SAMPLE MODELS
+    // =========================================================================
+    function manifoldToThreeGeometry(manifoldObj) {
+      const outMesh = manifoldObj.getMesh();
+      const outVerts = outMesh.vertProperties;
+      const outTris = outMesh.triVerts;
+      const numProp = outMesh.numProp || 3;
+      const triCount = outTris.length / 3;
+      const positions = new Float32Array(triCount * 9);
+
+      for (let t = 0; t < triCount; t++) {
+        for (let k = 0; k < 3; k++) {
+          const vIdx = outTris[t * 3 + k] * numProp;
+          positions[t * 9 + k * 3] = outVerts[vIdx];
+          positions[t * 9 + k * 3 + 1] = outVerts[vIdx + 1];
+          positions[t * 9 + k * 3 + 2] = outVerts[vIdx + 2];
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.computeBoundingBox();
+      const center = new THREE.Vector3();
+      geo.boundingBox.getCenter(center);
+      geo.translate(-center.x, -center.y, -center.z);
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    function createExtrudedProfileGeometry(points2D, depth) {
+      const shape = new THREE.Shape();
+      shape.moveTo(points2D[0][0], points2D[0][1]);
+      for (let i = 1; i < points2D.length; i++) {
+        shape.lineTo(points2D[i][0], points2D[i][1]);
+      }
+      shape.closePath();
+
+      const geo = new THREE.ExtrudeGeometry(shape, {
+        depth,
+        bevelEnabled: false,
+        steps: 1,
+      });
+
+      geo.computeBoundingBox();
+      const center = new THREE.Vector3();
+      geo.boundingBox.getCenter(center);
+      geo.translate(-center.x, -center.y, -center.z);
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    async function createSampleModel(sampleId = 'l-bracket') {
+      const wasm = await initCSGEngine();
+
+      if (wasm) {
+        const { Manifold } = wasm;
+
+        if (sampleId === 'stepped-block') {
+          const step1 = Manifold.cube([52, 12, 34], false);
+          const step2 = Manifold.cube([34, 24, 34], false);
+          const step3 = Manifold.cube([16, 38, 34], false);
+          const united = step1.add(step2).add(step3);
+          const hole = Manifold.cylinder(20, 5, 5, 28, true)
+            .rotate([90, 0, 0])
+            .translate([43, 6, 17]);
+          const finalManifold = united.subtract(hole);
+
+          const geo = manifoldToThreeGeometry(finalManifold);
+          step1.delete();
+          step2.delete();
+          step3.delete();
+          united.delete();
+          hole.delete();
+          finalManifold.delete();
+
+          return { name: 'Stepped_Mounting_Block.stl', geometry: geo };
+        }
+
+        if (sampleId === 'flanged-pipe') {
+          const flange = Manifold.cylinder(10, 24, 24, 36, false);
+          const boss = Manifold.cylinder(32, 14, 14, 36, false);
+          const bore = Manifold.cylinder(40, 7, 7, 36, false).translate([0, 0, -2]);
+          const united = flange.add(boss);
+          const finalManifold = united.subtract(bore).rotate([-90, 0, 0]);
+
+          const geo = manifoldToThreeGeometry(finalManifold);
+          flange.delete();
+          boss.delete();
+          bore.delete();
+          united.delete();
+          finalManifold.delete();
+
+          return { name: 'Flanged_Cylinder_Boss.stl', geometry: geo };
+        }
+
+        if (sampleId === 't-slot') {
+          const outer = Manifold.cube([48, 30, 38], false);
+          const innerWide = Manifold.cube([28, 12, 44], false).translate([10, 8, -3]);
+          const innerNeck = Manifold.cube([16, 16, 44], false).translate([16, 18, -3]);
+          const slot = innerWide.add(innerNeck);
+          const finalManifold = outer.subtract(slot);
+
+          const geo = manifoldToThreeGeometry(finalManifold);
+          outer.delete();
+          innerWide.delete();
+          innerNeck.delete();
+          slot.delete();
+          finalManifold.delete();
+
+          return { name: 'T_Channel_Guide.stl', geometry: geo };
+        }
+
+        const horizontalLeg = Manifold.cube([45, 10, 32], false);
+        const verticalLeg = Manifold.cube([10, 40, 32], false);
+        const bracket = horizontalLeg.add(verticalLeg);
+        const hole = Manifold.cylinder(24, 6.5, 6.5, 32, true)
+          .rotate([90, 0, 0])
+          .translate([28, 5, 16]);
+        const finalManifold = bracket.subtract(hole);
+
+        const geo = manifoldToThreeGeometry(finalManifold);
+        horizontalLeg.delete();
+        verticalLeg.delete();
+        bracket.delete();
+        hole.delete();
+        finalManifold.delete();
+
+        return { name: 'L_Bracket_With_Hole.stl', geometry: geo };
+      }
+
+      const pts = [
+        [0, 0],
+        [45, 0],
+        [45, 10],
+        [10, 10],
+        [10, 40],
+        [0, 40],
+      ];
+      return { name: 'L_Bracket.stl', geometry: createExtrudedProfileGeometry(pts, 32) };
+    }
+
+    // =========================================================================
+    // 4. MAIN APPLICATION CONTROLLER & 3D VIEWPORT
+    // =========================================================================
+    const state = {
+      theme: localStorage.getItem('edgecraft-theme') || 'light',
+      modelName: 'L_Bracket_With_Hole.stl',
+      originalGeometry: null,
+      currentGeometry: null,
+      topology: null,
+
+      selectionMode: 'smart',
+      creaseAngleDeg: 25,
+      filterConvex: true,
+      filterConcave: true,
+      selectedSegmentIds: new Set(),
+      hoveredSegmentIds: new Set(),
+      hoveredLeadSegId: null,
+
+      opType: 'chamfer',
+      size1: 2.0,
+      size2: 2.0,
+      asymmetric: false,
+      flipAsymmetric: false,
+      filletSegments: 12,
+      endpointMode: 'smart',
+
+      showWireframe: false,
+      showLivePreview: true,
+      showEdges: true,
+
+      history: [],
+      historyIndex: -1,
+      isApplying: false,
+    };
+
+    const dom = {
+      canvasContainer: document.getElementById('canvas-container'),
+      viewportWrapper: document.getElementById('viewport-wrapper'),
+      dropOverlay: document.getElementById('drop-overlay'),
+      edgeTooltip: document.getElementById('edge-tooltip'),
+      fileInput: document.getElementById('stl-file-input'),
+      sampleSelect: document.getElementById('sample-select'),
+      btnUndo: document.getElementById('btn-undo'),
+      btnRedo: document.getElementById('btn-redo'),
+      btnResetModel: document.getElementById('btn-reset-model'),
+      btnExportStl: document.getElementById('btn-export-stl'),
+      engineStatus: document.getElementById('engine-status'),
+      engineStatusText: document.getElementById('engine-status-text'),
+
+      btnThemeToggle: document.getElementById('btn-theme-toggle'),
+      themeIcon: document.getElementById('theme-icon'),
+      themeLabel: document.getElementById('theme-label'),
+      btnOpenLibraries: document.getElementById('btn-open-libraries'),
+      librariesModal: document.getElementById('libraries-modal'),
+      btnCloseLibraries: document.getElementById('btn-close-libraries'),
+      btnDoneLibraries: document.getElementById('btn-done-libraries'),
+
+      segModeBtns: document.querySelectorAll('[data-select-mode]'),
+      selectionModeHint: document.getElementById('selection-mode-hint'),
+      creaseSlider: document.getElementById('crease-angle-slider'),
+      creaseVal: document.getElementById('crease-angle-val'),
+      filterConvex: document.getElementById('filter-convex'),
+      filterConcave: document.getElementById('filter-concave'),
+
+      selectedCount: document.getElementById('selected-count'),
+      selectedTypes: document.getElementById('selected-types'),
+      btnClearSelection: document.getElementById('btn-clear-selection'),
+      btnInvertSelection: document.getElementById('btn-invert-selection'),
+      totalEdgesBadge: document.getElementById('total-edges-badge'),
+      selectedEdgesList: document.getElementById('selected-edges-list'),
+
+      infoDimensions: document.getElementById('info-dimensions'),
+      infoTriangles: document.getElementById('info-triangles'),
+      infoManifold: document.getElementById('info-manifold'),
+
+      btnFitView: document.getElementById('btn-fit-view'),
+      btnToggleWireframe: document.getElementById('btn-toggle-wireframe'),
+      btnTogglePreview: document.getElementById('btn-toggle-preview'),
+      btnToggleEdges: document.getElementById('btn-toggle-edges'),
+
+      opCards: document.querySelectorAll('[data-op-type]'),
+      sizeLabel: document.getElementById('size-label'),
+      sizeInput: document.getElementById('chamfer-size-input'),
+      sizeSlider: document.getElementById('chamfer-size-slider'),
+      presetBtns: document.querySelectorAll('.preset-btn'),
+
+      chamferSymmetryGroup: document.getElementById('chamfer-symmetry-group'),
+      asymmetricToggle: document.getElementById('asymmetric-toggle'),
+      asymmetricControls: document.getElementById('asymmetric-controls'),
+      size2Input: document.getElementById('chamfer-size2-input'),
+      size2Slider: document.getElementById('chamfer-size2-slider'),
+      btnFlipAsymmetric: document.getElementById('btn-flip-asymmetric'),
+
+      filletSegmentsGroup: document.getElementById('fillet-segments-group'),
+      filletSegmentsSlider: document.getElementById('fillet-segments-slider'),
+      filletSegmentsVal: document.getElementById('fillet-segments-val'),
+
+      endpointModeSelect: document.getElementById('endpoint-mode-select'),
+      btnApplyOp: document.getElementById('btn-apply-op'),
+      btnApplyText: document.getElementById('btn-apply-text'),
+      opHistoryCount: document.getElementById('op-history-count'),
+      opHistoryList: document.getElementById('op-history-list'),
+      toastContainer: document.getElementById('toast-container'),
+    };
+
+    let scene, camera, renderer, controls;
+    let modelMesh = null;
+    let wireframeMesh = null;
+    let featureLinesMesh = null;
+    let highlightTubesGroup = null;
+    let previewMesh = null;
+    let gridHelper = null;
+
+    const raycaster = new THREE.Raycaster();
+    const pointerNDC = new THREE.Vector2();
+    let pointerDownPos = { x: 0, y: 0 };
+
+    const COLOR_CONVEX_DARK = new THREE.Color(0x38bdf8);
+    const COLOR_CONVEX_LIGHT = new THREE.Color(0x0284c7);
+    const COLOR_CONCAVE_DARK = new THREE.Color(0xf472b6);
+    const COLOR_CONCAVE_LIGHT = new THREE.Color(0xdb2777);
+    const COLOR_SELECTED = new THREE.Color(0xf59e0b);
+    const COLOR_HOVER = new THREE.Color(0x10b981);
+
+    async function init() {
+      initThreeScene();
+      applyTheme(state.theme);
+      bindUIEvents();
+
+      initCSGEngine().then((wasm) => {
+        const dot = dom.engineStatus.querySelector('.status-dot');
+        if (wasm) {
+          dot.classList.remove('loading');
+          dot.classList.add('ready');
+          dom.engineStatusText.textContent = 'Manifold CSG Ready';
+        } else {
+          dom.engineStatusText.textContent = 'CSG Unavailable';
+        }
+      });
+
+      await loadSample('l-bracket');
+      animate();
+    }
+
+    function applyTheme(theme) {
+      state.theme = theme === 'dark' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', state.theme);
+      try {
+        localStorage.setItem('edgecraft-theme', state.theme);
+      } catch (_) {}
+
+      const isDark = state.theme === 'dark';
+      dom.themeIcon.textContent = isDark ? '☀️' : '🌙';
+      dom.themeLabel.textContent = isDark ? 'Light' : 'Dark';
+
+      if (modelMesh && modelMesh.material) {
+        modelMesh.material.color.setHex(isDark ? 0x475569 : 0x94a3b8);
+      }
+
+      if (scene && gridHelper) {
+        const prevY = gridHelper.position.y;
+        scene.remove(gridHelper);
+        gridHelper.geometry.dispose();
+        if (Array.isArray(gridHelper.material)) {
+          gridHelper.material.forEach((m) => m.dispose());
+        } else if (gridHelper.material) {
+          gridHelper.material.dispose();
+        }
+        gridHelper = new THREE.GridHelper(
+          160,
+          16,
+          isDark ? 0x334155 : 0x94a3b8,
+          isDark ? 0x1e293b : 0xcbd5e1
+        );
+        gridHelper.position.y = prevY;
+        scene.add(gridHelper);
+      }
+
+      rebuildFeatureEdgeLines();
+      rebuildHighlightTubes();
+    }
+
+    function initThreeScene() {
+      scene = new THREE.Scene();
+
+      const width = dom.canvasContainer.clientWidth || 800;
+      const height = dom.canvasContainer.clientHeight || 600;
+
+      camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 5000);
+      camera.position.set(65, 52, 75);
+
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance',
+      });
+      renderer.setClearColor(0x000000, 0);
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.08;
+      dom.canvasContainer.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.screenSpacePanning = true;
+
+      const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.78);
+      scene.add(ambientLight);
+
+      const keyLight = new THREE.DirectionalLight(0xffffff, 1.35);
+      keyLight.position.set(80, 120, 90);
+      scene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.65);
+      fillLight.position.set(-90, 50, -60);
+      scene.add(fillLight);
+
+      const rimLight = new THREE.DirectionalLight(0xfde68a, 0.4);
+      rimLight.position.set(0, -100, 50);
+      scene.add(rimLight);
+
+      gridHelper = new THREE.GridHelper(160, 16, 0x94a3b8, 0xcbd5e1);
+      gridHelper.position.y = -25;
+      scene.add(gridHelper);
+
+      highlightTubesGroup = new THREE.Group();
+      scene.add(highlightTubesGroup);
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function onWindowResize() {
+      if (!dom.canvasContainer || !renderer || !camera) return;
+      const w = dom.canvasContainer.clientWidth;
+      const h = dom.canvasContainer.clientHeight;
+      if (w === 0 || h === 0) return;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (controls) controls.update();
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
+    }
+
+    function setBaseModelGeometry(geometry, name = 'Model.stl') {
+      state.modelName = name;
+      const cleanGeo = prepareLoadedGeometry(geometry);
+      state.originalGeometry = cleanGeo.clone();
+
+      state.history = [
+        {
+          geometry: cleanGeo.clone(),
+          label: `Loaded ${name}`,
+          opCount: 0,
+        },
+      ];
+      state.historyIndex = 0;
+
+      applyGeometryState(cleanGeo, true);
+      updateHistoryUI();
+    }
+
+    function prepareLoadedGeometry(rawGeo) {
+      const geo = rawGeo.index ? rawGeo.toNonIndexed() : rawGeo.clone();
+      geo.computeBoundingBox();
+      const box = geo.boundingBox;
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      geo.translate(-center.x, -center.y, -center.z);
+      geo.computeBoundingBox();
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    function applyGeometryState(geometry, fitCamera = false) {
+      state.currentGeometry = geometry;
+      state.selectedSegmentIds.clear();
+      state.hoveredSegmentIds.clear();
+      state.hoveredLeadSegId = null;
+
+      if (modelMesh) {
+        scene.remove(modelMesh);
+        modelMesh.geometry.dispose();
+        modelMesh.material.dispose();
+        modelMesh = null;
+      }
+      if (wireframeMesh) {
+        scene.remove(wireframeMesh);
+        wireframeMesh.geometry.dispose();
+        wireframeMesh.material.dispose();
+        wireframeMesh = null;
+      }
+
+      const isDark = state.theme === 'dark';
+      const mat = new THREE.MeshStandardMaterial({
+        color: isDark ? 0x475569 : 0x94a3b8,
+        roughness: 0.42,
+        metalness: 0.12,
+        flatShading: true,
+        polygonOffset: true,
+        polygonOffsetFactor: 1.5,
+        polygonOffsetUnits: 2.0,
+      });
+      modelMesh = new THREE.Mesh(geometry, mat);
+      scene.add(modelMesh);
+
+      const wireGeo = new THREE.WireframeGeometry(geometry);
+      const wireMat = new THREE.LineBasicMaterial({
+        color: isDark ? 0x94a3b8 : 0x475569,
+        transparent: true,
+        opacity: 0.25,
+        depthTest: true,
+      });
+      wireframeMesh = new THREE.LineSegments(wireGeo, wireMat);
+      wireframeMesh.visible = state.showWireframe;
+      scene.add(wireframeMesh);
+
+      geometry.computeBoundingBox();
+      const bb = geometry.boundingBox;
+      if (gridHelper && bb) {
+        gridHelper.position.y = bb.min.y - 0.2;
+      }
+
+      rebuildTopology();
+
+      if (fitCamera) {
+        fitCameraToModel();
+      }
+    }
+
+    function rebuildTopology() {
+      if (!state.currentGeometry) return;
+
+      state.topology = analyzeMeshTopology(state.currentGeometry, state.creaseAngleDeg);
+      state.selectedSegmentIds.clear();
+      state.hoveredSegmentIds.clear();
+
+      rebuildFeatureEdgeLines();
+      rebuildHighlightTubes();
+      updateLivePreviewMesh();
+      updateSelectionUI();
+      updateModelInfoUI();
+    }
+
+    function rebuildFeatureEdgeLines() {
+      if (featureLinesMesh) {
+        scene.remove(featureLinesMesh);
+        featureLinesMesh.geometry.dispose();
+        featureLinesMesh.material.dispose();
+        featureLinesMesh = null;
+      }
+
+      if (!state.topology) return;
+
+      const isDark = state.theme === 'dark';
+      const convexColor = isDark ? COLOR_CONVEX_DARK : COLOR_CONVEX_LIGHT;
+      const concaveColor = isDark ? COLOR_CONCAVE_DARK : COLOR_CONCAVE_LIGHT;
+
+      const { segments } = state.topology;
+      const positions = [];
+      const colors = [];
+
+      for (const seg of segments) {
+        if (seg.type === 'convex' && !state.filterConvex) continue;
+        if (seg.type === 'concave' && !state.filterConcave) continue;
+
+        positions.push(seg.pA.x, seg.pA.y, seg.pA.z, seg.pB.x, seg.pB.y, seg.pB.z);
+
+        let c = seg.type === 'convex' ? convexColor : concaveColor;
+        if (state.selectedSegmentIds.has(seg.id)) {
+          c = COLOR_SELECTED;
+        } else if (state.hoveredSegmentIds.has(seg.id)) {
+          c = COLOR_HOVER;
+        }
+
+        colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+      }
+
+      const lineGeo = new THREE.BufferGeometry();
+      lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      lineGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+      const lineMat = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.95,
+      });
+
+      featureLinesMesh = new THREE.LineSegments(lineGeo, lineMat);
+      featureLinesMesh.visible = state.showEdges;
+      scene.add(featureLinesMesh);
+    }
+
+    function rebuildHighlightTubes() {
+      while (highlightTubesGroup.children.length > 0) {
+        const child = highlightTubesGroup.children.pop();
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      }
+
+      if (!state.topology || !state.showEdges || !state.currentGeometry) return;
+
+      state.currentGeometry.computeBoundingSphere();
+      const modelRadius = state.currentGeometry.boundingSphere
+        ? state.currentGeometry.boundingSphere.radius
+        : 30;
+      const baseRadius = Math.max(0.08, modelRadius * 0.009);
+
+      const isDark = state.theme === 'dark';
+      const selectedMat = new THREE.MeshBasicMaterial({
+        color: isDark ? 0xfacc15 : 0xf59e0b,
+        depthTest: true,
+      });
+      const hoverMat = new THREE.MeshBasicMaterial({
+        color: isDark ? 0xffffff : 0x0ea5e9,
+        transparent: true,
+        opacity: 0.9,
+        depthTest: true,
+      });
+
+      const unitCyl = new THREE.CylinderGeometry(1, 1, 1, 8, 1, false);
+      const upVec = new THREE.Vector3(0, 1, 0);
+
+      const addTubeForSeg = (seg, radius, material) => {
+        const mesh = new THREE.Mesh(unitCyl, material);
+        mesh.position.copy(seg.midpoint);
+        const quat = new THREE.Quaternion().setFromUnitVectors(upVec, seg.tangent);
+        mesh.quaternion.copy(quat);
+        mesh.scale.set(radius, seg.length, radius);
+        highlightTubesGroup.add(mesh);
+      };
+
+      for (const sId of state.selectedSegmentIds) {
+        const seg = state.topology.segments[sId];
+        if (seg) addTubeForSeg(seg, baseRadius * 1.25, selectedMat);
+      }
+
+      for (const sId of state.hoveredSegmentIds) {
+        if (state.selectedSegmentIds.has(sId)) continue;
+        const seg = state.topology.segments[sId];
+        if (seg) addTubeForSeg(seg, baseRadius * 1.1, hoverMat);
+      }
+    }
+
+    function updateLivePreviewMesh() {
+      if (previewMesh) {
+        scene.remove(previewMesh);
+        previewMesh.geometry.dispose();
+        previewMesh.material.dispose();
+        previewMesh = null;
+      }
+
+      if (!state.showLivePreview || !state.topology || state.selectedSegmentIds.size === 0) {
+        return;
+      }
+
+      try {
+        const { previewGeometry } = buildOperationMeshes(
+          state.topology,
+          Array.from(state.selectedSegmentIds),
+          getOperationParams()
+        );
+
+        const previewMat = new THREE.MeshStandardMaterial({
+          color: state.opType === 'chamfer' ? 0xf59e0b : 0xa855f7,
+          emissive: state.opType === 'chamfer' ? 0x78350f : 0x4c1d95,
+          emissiveIntensity: 0.35,
+          roughness: 0.3,
+          metalness: 0.1,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.88,
+          polygonOffset: true,
+          polygonOffsetFactor: -1.5,
+          polygonOffsetUnits: -2.0,
+        });
+
+        previewMesh = new THREE.Mesh(previewGeometry, previewMat);
+        scene.add(previewMesh);
+      } catch (err) {
+        console.warn('Preview generation error:', err);
+      }
+    }
+
+    function getOperationParams() {
+      return {
+        opType: state.opType,
+        size1: state.size1,
+        size2: state.size2,
+        asymmetric: state.asymmetric,
+        flipAsymmetric: state.flipAsymmetric,
+        filletSegments: state.filletSegments,
+        endpointMode: state.endpointMode,
+      };
+    }
+
+    function pickEdgeAtPointer(clientX, clientY) {
+      if (!state.topology || !modelMesh || !state.showEdges) return null;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      const mouseX = clientX - rect.left;
+      const mouseY = clientY - rect.top;
+
+      pointerNDC.x = (mouseX / rect.width) * 2 - 1;
+      pointerNDC.y = -(mouseY / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(pointerNDC, camera);
+
+      const hits = raycaster.intersectObject(modelMesh, false);
+      const visibleSurfaceDist = hits.length > 0 ? hits[0].distance : Infinity;
+
+      state.currentGeometry.computeBoundingSphere();
+      const boundRadius = state.currentGeometry.boundingSphere
+        ? state.currentGeometry.boundingSphere.radius
+        : 30;
+      const depthBias = Math.max(0.6, boundRadius * 0.035);
+
+      const pA2D = new THREE.Vector3();
+      const pB2D = new THREE.Vector3();
+      const closest3D = new THREE.Vector3();
+
+      let bestSeg = null;
+      let bestPixelDist = 14;
+
+      for (const seg of state.topology.segments) {
+        if (seg.type === 'convex' && !state.filterConvex) continue;
+        if (seg.type === 'concave' && !state.filterConcave) continue;
+
+        pA2D.copy(seg.pA).project(camera);
+        pB2D.copy(seg.pB).project(camera);
+
+        if (pA2D.z > 1 && pB2D.z > 1) continue;
+
+        const ax = (pA2D.x * 0.5 + 0.5) * rect.width;
+        const ay = (-pA2D.y * 0.5 + 0.5) * rect.height;
+        const bx = (pB2D.x * 0.5 + 0.5) * rect.width;
+        const by = (-pB2D.y * 0.5 + 0.5) * rect.height;
+
+        const dx = bx - ax;
+        const dy = by - ay;
+        const lenSq = dx * dx + dy * dy;
+        let t = 0;
+        if (lenSq > 1e-4) {
+          t = THREE.MathUtils.clamp(((mouseX - ax) * dx + (mouseY - ay) * dy) / lenSq, 0, 1);
+        }
+
+        const projX = ax + t * dx;
+        const projY = ay + t * dy;
+        const pixelDist = Math.hypot(mouseX - projX, mouseY - projY);
+
+        if (pixelDist >= bestPixelDist) continue;
+
+        closest3D.lerpVectors(seg.pA, seg.pB, t);
+        const distToCam = camera.position.distanceTo(closest3D);
+
+        if (distToCam <= visibleSurfaceDist + depthBias * 2.2) {
+          bestPixelDist = pixelDist;
+          bestSeg = seg;
+        }
+      }
+
+      return bestSeg;
+    }
+
+    function fitCameraToModel() {
+      if (!state.currentGeometry) return;
+      state.currentGeometry.computeBoundingSphere();
+      const sphere = state.currentGeometry.boundingSphere;
+      if (!sphere) return;
+
+      const r = Math.max(sphere.radius, 5);
+      controls.target.copy(sphere.center);
+      const dir = new THREE.Vector3(1.15, 0.85, 1.25).normalize();
+      camera.position.copy(sphere.center).addScaledVector(dir, r * 2.55);
+      camera.near = Math.max(0.05, r * 0.01);
+      camera.far = Math.max(2000, r * 30);
+      camera.updateProjectionMatrix();
+      controls.update();
+    }
+
+    async function handleApplyOperation() {
+      if (state.selectedSegmentIds.size === 0 || state.isApplying) return;
+
+      state.isApplying = true;
+      dom.btnApplyOp.disabled = true;
+      dom.btnApplyText.textContent = 'Applying CSG Operation...';
+
+      try {
+        const selectedIds = Array.from(state.selectedSegmentIds);
+        const params = getOperationParams();
+        const newGeo = await applyEdgeOperationsCSG(state.topology, selectedIds, params);
+
+        let conv = 0;
+        let conc = 0;
+        for (const id of selectedIds) {
+          const s = state.topology.segments[id];
+          if (s?.type === 'convex') conv++;
+          else if (s?.type === 'concave') conc++;
+        }
+
+        const opName = state.opType === 'chamfer' ? 'Chamfer' : 'Fillet';
+        const sizeDesc =
+          state.opType === 'chamfer' && state.asymmetric
+            ? `${state.size1}×${state.size2}mm`
+            : `${state.size1}mm`;
+
+        if (state.historyIndex < state.history.length - 1) {
+          state.history.splice(state.historyIndex + 1);
+        }
+
+        state.history.push({
+          geometry: newGeo.clone(),
+          label: `${opName} (${sizeDesc}) on ${selectedIds.length} segs`,
+          details: `${conv ? `${conv} convex` : ''}${conv && conc ? ', ' : ''}${conc ? `${conc} concave` : ''}`,
+        });
+        state.historyIndex = state.history.length - 1;
+
+        applyGeometryState(newGeo, false);
+        updateHistoryUI();
+        showToast(`Applied ${opName} (${sizeDesc}) successfully!`, 'success');
+      } catch (err) {
+        console.error(err);
+        showToast(`Operation failed: ${err.message}`, 'error');
+      } finally {
+        state.isApplying = false;
+        updateSelectionUI();
+      }
+    }
+
+    function updateSelectionUI() {
+      const count = state.selectedSegmentIds.size;
+      let convexCount = 0;
+      let concaveCount = 0;
+
+      if (state.topology) {
+        for (const sId of state.selectedSegmentIds) {
+          const seg = state.topology.segments[sId];
+          if (!seg) continue;
+          if (seg.type === 'convex') convexCount++;
+          else concaveCount++;
+        }
+        dom.totalEdgesBadge.textContent = `${state.topology.smartGroups.length} edges (${state.topology.segments.length} segs)`;
+      }
+
+      dom.selectedCount.textContent = String(count);
+      dom.selectedTypes.textContent = `${convexCount} / ${concaveCount}`;
+      dom.btnClearSelection.disabled = count === 0;
+
+      dom.btnApplyOp.disabled = count === 0 || state.isApplying;
+      const opTitle = state.opType === 'chamfer' ? 'Chamfer' : 'Fillet';
+      dom.btnApplyText.textContent =
+        count === 0
+          ? 'Select Edge(s) to Apply'
+          : `Apply ${state.size1}mm ${opTitle} (${count} seg${count > 1 ? 's' : ''})`;
+
+      if (count === 0 || !state.topology) {
+        dom.selectedEdgesList.innerHTML = `
+          <div class="empty-state">
+            Click on any highlighted edge in the 3D view to select it.<br /><br />
+            Blue = <strong>Convex</strong> (cuts corner)<br />
+            Pink = <strong>Concave</strong> (fills corner)
+          </div>
+        `;
+        return;
+      }
+
+      const groupBuckets = new Map();
+      for (const sId of state.selectedSegmentIds) {
+        const seg = state.topology.segments[sId];
+        if (!seg) continue;
+        const key = seg.smartGroupId >= 0 ? `G${seg.smartGroupId}` : `S${sId}`;
+        if (!groupBuckets.has(key)) {
+          groupBuckets.set(key, {
+            key,
+            type: seg.type,
+            dihedralDeg: Math.round(seg.dihedralDeg),
+            segIds: [],
+            length: 0,
+          });
+        }
+        const b = groupBuckets.get(key);
+        b.segIds.push(sId);
+        b.length += seg.length;
+      }
+
+      const itemsHtml = [];
+      let idx = 1;
+      for (const bucket of groupBuckets.values()) {
+        itemsHtml.push(`
+          <div class="edge-item">
+            <div class="edge-item-left">
+              <span class="edge-type-tag ${bucket.type}">${bucket.type}</span>
+              <span>Edge #${idx} (${bucket.length.toFixed(1)}mm, ${bucket.dihedralDeg}°)</span>
+            </div>
+            <button type="button" class="edge-remove-btn" data-remove-segs="${bucket.segIds.join(',')}" title="Deselect this edge">✕</button>
+          </div>
+        `);
+        idx++;
+      }
+      dom.selectedEdgesList.innerHTML = itemsHtml.join('');
+
+      dom.selectedEdgesList.querySelectorAll('[data-remove-segs]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const ids = btn.getAttribute('data-remove-segs').split(',').map(Number);
+          for (const id of ids) state.selectedSegmentIds.delete(id);
+          rebuildFeatureEdgeLines();
+          rebuildHighlightTubes();
+          updateLivePreviewMesh();
+          updateSelectionUI();
+        });
+      });
+    }
+
+    function updateModelInfoUI() {
+      if (!state.currentGeometry || !state.topology) return;
+      state.currentGeometry.computeBoundingBox();
+      const bb = state.currentGeometry.boundingBox;
+      const size = new THREE.Vector3();
+      bb.getSize(size);
+
+      dom.infoDimensions.textContent = `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
+      dom.infoTriangles.textContent = state.topology.faces.length.toLocaleString();
+      dom.infoManifold.textContent = state.topology.isWatertight
+        ? 'Watertight Manifold'
+        : `Open (${state.topology.boundaryEdgeCount} boundary)`;
+      dom.infoManifold.style.color = state.topology.isWatertight ? '#10b981' : '#d97706';
+    }
+
+    function updateHistoryUI() {
+      dom.btnUndo.disabled = state.historyIndex <= 0;
+      dom.btnRedo.disabled = state.historyIndex >= state.history.length - 1;
+
+      const appliedSteps = state.history.slice(1, state.historyIndex + 1);
+      dom.opHistoryCount.textContent = `${appliedSteps.length} step${appliedSteps.length === 1 ? '' : 's'}`;
+
+      if (appliedSteps.length === 0) {
+        dom.opHistoryList.innerHTML = `
+          <div class="empty-state">
+            No operations applied yet. Select edges and click <strong>Apply</strong> to modify the mesh.
+          </div>
+        `;
+        return;
+      }
+
+      dom.opHistoryList.innerHTML = appliedSteps
+        .map(
+          (step, i) => `
+          <div class="history-item">
+            <div>
+              <strong>${i + 1}. ${step.label}</strong>
+              <div style="font-size:10.5px;color:var(--text-muted)">${step.details || ''}</div>
+            </div>
+          </div>
+        `
+        )
+        .reverse()
+        .join('');
+    }
+
+    async function loadSample(sampleId) {
+      try {
+        const { name, geometry } = await createSampleModel(sampleId);
+        setBaseModelGeometry(geometry, name);
+        showToast(`Loaded sample: ${name}`, 'info');
+      } catch (err) {
+        console.error(err);
+        showToast(`Failed to load sample: ${err.message}`, 'error');
+      }
+    }
+
+    function loadUserSTLFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const loader = new STLLoader();
+          const geometry = loader.parse(e.target.result);
+          if (!geometry || !geometry.getAttribute('position') || geometry.getAttribute('position').count === 0) {
+            throw new Error('STL file contains no valid triangles.');
+          }
+          setBaseModelGeometry(geometry, file.name);
+          showToast(`Loaded ${file.name} successfully!`, 'success');
+        } catch (err) {
+          console.error(err);
+          showToast(`Could not parse STL file: ${err.message}`, 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function exportCurrentSTL() {
+      if (!modelMesh) return;
+      try {
+        const exporter = new STLExporter();
+        const result = exporter.parse(modelMesh, { binary: true });
+        const blob = new Blob([result], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+
+        const baseName = state.modelName.replace(/\.stl$/i, '');
+        const outName = `${baseName}_edgecraft.stl`;
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = outName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast(`Exported ${outName}`, 'success');
+      } catch (err) {
+        console.error(err);
+        showToast(`Export failed: ${err.message}`, 'error');
+      }
+    }
+
+    function bindUIEvents() {
+      // Theme Toggle
+      dom.btnThemeToggle.addEventListener('click', () => {
+        applyTheme(state.theme === 'dark' ? 'light' : 'dark');
+      });
+
+      // Libraries Modal
+      const closeLibrariesModal = () => dom.librariesModal.classList.add('hidden');
+      dom.btnOpenLibraries.addEventListener('click', () => {
+        dom.librariesModal.classList.remove('hidden');
+      });
+      dom.btnCloseLibraries.addEventListener('click', closeLibrariesModal);
+      dom.btnDoneLibraries.addEventListener('click', closeLibrariesModal);
+      dom.librariesModal.addEventListener('click', (e) => {
+        if (e.target === dom.librariesModal) closeLibrariesModal();
+      });
+
+      dom.fileInput.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+          loadUserSTLFile(file);
+          dom.fileInput.value = '';
+        }
+      });
+
+      dom.sampleSelect.addEventListener('change', (e) => {
+        if (e.target.value) {
+          loadSample(e.target.value);
+        }
+      });
+
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dom.dropOverlay.classList.remove('hidden');
+      });
+
+      window.addEventListener('dragleave', (e) => {
+        if (e.relatedTarget === null) {
+          dom.dropOverlay.classList.add('hidden');
+        }
+      });
+
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dom.dropOverlay.classList.add('hidden');
+        const file = e.dataTransfer?.files?.[0];
+        if (file) {
+          loadUserSTLFile(file);
+        }
+      });
+
+      dom.btnUndo.addEventListener('click', () => {
+        if (state.historyIndex > 0) {
+          state.historyIndex--;
+          applyGeometryState(state.history[state.historyIndex].geometry.clone(), false);
+          updateHistoryUI();
+        }
+      });
+
+      dom.btnRedo.addEventListener('click', () => {
+        if (state.historyIndex < state.history.length - 1) {
+          state.historyIndex++;
+          applyGeometryState(state.history[state.historyIndex].geometry.clone(), false);
+          updateHistoryUI();
+        }
+      });
+
+      dom.btnResetModel.addEventListener('click', () => {
+        if (!state.originalGeometry) return;
+        setBaseModelGeometry(state.originalGeometry.clone(), state.modelName);
+        showToast('Reset model to original geometry.', 'info');
+      });
+
+      dom.btnExportStl.addEventListener('click', exportCurrentSTL);
+
+      const modeHints = {
+        smart: 'Automatically heals split STL edges along flat faces and smooth curves.',
+        collinear: 'Selects strictly straight collinear edge segments.',
+        loop: 'Selects entire connected edge rings/perimeters of the same type.',
+        segment: 'Selects individual raw STL triangle segments for fine control.',
+      };
+
+      dom.segModeBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          dom.segModeBtns.forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.selectionMode = btn.getAttribute('data-select-mode');
+          dom.selectionModeHint.textContent = modeHints[state.selectionMode] || '';
+        });
+      });
+
+      dom.creaseSlider.addEventListener('input', (e) => {
+        state.creaseAngleDeg = Number(e.target.value);
+        dom.creaseVal.textContent = `${state.creaseAngleDeg}°`;
+        rebuildTopology();
+      });
+
+      dom.filterConvex.addEventListener('change', (e) => {
+        state.filterConvex = e.target.checked;
+        rebuildFeatureEdgeLines();
+      });
+
+      dom.filterConcave.addEventListener('change', (e) => {
+        state.filterConcave = e.target.checked;
+        rebuildFeatureEdgeLines();
+      });
+
+      dom.btnClearSelection.addEventListener('click', () => {
+        state.selectedSegmentIds.clear();
+        rebuildFeatureEdgeLines();
+        rebuildHighlightTubes();
+        updateLivePreviewMesh();
+        updateSelectionUI();
+      });
+
+      dom.btnInvertSelection.addEventListener('click', () => {
+        if (!state.topology) return;
+        const nextSet = new Set();
+        for (const seg of state.topology.segments) {
+          if (seg.type === 'convex' && !state.filterConvex) continue;
+          if (seg.type === 'concave' && !state.filterConcave) continue;
+          if (!state.selectedSegmentIds.has(seg.id)) {
+            nextSet.add(seg.id);
+          }
+        }
+        state.selectedSegmentIds = nextSet;
+        rebuildFeatureEdgeLines();
+        rebuildHighlightTubes();
+        updateLivePreviewMesh();
+        updateSelectionUI();
+      });
+
+      dom.btnFitView.addEventListener('click', fitCameraToModel);
+
+      dom.btnToggleWireframe.addEventListener('click', () => {
+        state.showWireframe = !state.showWireframe;
+        dom.btnToggleWireframe.classList.toggle('active', state.showWireframe);
+        if (wireframeMesh) wireframeMesh.visible = state.showWireframe;
+      });
+
+      dom.btnTogglePreview.addEventListener('click', () => {
+        state.showLivePreview = !state.showLivePreview;
+        dom.btnTogglePreview.classList.toggle('active', state.showLivePreview);
+        updateLivePreviewMesh();
+      });
+
+      dom.btnToggleEdges.addEventListener('click', () => {
+        state.showEdges = !state.showEdges;
+        dom.btnToggleEdges.classList.toggle('active', state.showEdges);
+        if (featureLinesMesh) featureLinesMesh.visible = state.showEdges;
+        rebuildHighlightTubes();
+      });
+
+      dom.opCards.forEach((card) => {
+        card.addEventListener('click', () => {
+          dom.opCards.forEach((c) => c.classList.remove('active'));
+          card.classList.add('active');
+          state.opType = card.getAttribute('data-op-type');
+
+          const isChamfer = state.opType === 'chamfer';
+          dom.sizeLabel.textContent = isChamfer ? 'Chamfer Distance (mm)' : 'Fillet Setback / Radius (mm)';
+          dom.chamferSymmetryGroup.classList.toggle('hidden', !isChamfer);
+          dom.filletSegmentsGroup.classList.toggle('hidden', isChamfer);
+
+          updateLivePreviewMesh();
+          updateSelectionUI();
+        });
+      });
+
+      const syncSize1 = (val) => {
+        const num = Math.max(0.05, Math.min(100, Number(val) || 1.0));
+        state.size1 = num;
+        dom.sizeInput.value = num;
+        dom.sizeSlider.value = Math.min(15, num);
+        dom.presetBtns.forEach((btn) => {
+          btn.classList.toggle('active', Math.abs(Number(btn.dataset.size) - num) < 1e-3);
+        });
+        updateLivePreviewMesh();
+        updateSelectionUI();
+      };
+
+      dom.sizeSlider.addEventListener('input', (e) => syncSize1(e.target.value));
+      dom.sizeInput.addEventListener('input', (e) => syncSize1(e.target.value));
+      dom.presetBtns.forEach((btn) => {
+        btn.addEventListener('click', () => syncSize1(btn.dataset.size));
+      });
+
+      dom.asymmetricToggle.addEventListener('change', (e) => {
+        state.asymmetric = e.target.checked;
+        dom.asymmetricControls.classList.toggle('hidden', !state.asymmetric);
+        updateLivePreviewMesh();
+      });
+
+      const syncSize2 = (val) => {
+        const num = Math.max(0.05, Math.min(100, Number(val) || 1.0));
+        state.size2 = num;
+        dom.size2Input.value = num;
+        dom.size2Slider.value = Math.min(15, num);
+        updateLivePreviewMesh();
+      };
+
+      dom.size2Slider.addEventListener('input', (e) => syncSize2(e.target.value));
+      dom.size2Input.addEventListener('input', (e) => syncSize2(e.target.value));
+
+      dom.btnFlipAsymmetric.addEventListener('click', () => {
+        state.flipAsymmetric = !state.flipAsymmetric;
+        updateLivePreviewMesh();
+      });
+
+      dom.filletSegmentsSlider.addEventListener('input', (e) => {
+        state.filletSegments = Number(e.target.value);
+        dom.filletSegmentsVal.textContent = String(state.filletSegments);
+        updateLivePreviewMesh();
+      });
+
+      dom.endpointModeSelect.addEventListener('change', (e) => {
+        state.endpointMode = e.target.value;
+        updateLivePreviewMesh();
+      });
+
+      dom.btnApplyOp.addEventListener('click', handleApplyOperation);
+
+      const canvas = renderer.domElement;
+
+      canvas.addEventListener('pointerdown', (e) => {
+        pointerDownPos = { x: e.clientX, y: e.clientY };
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        if (e.buttons !== 0) {
+          dom.edgeTooltip.classList.add('hidden');
+          return;
+        }
+
+        const hitSeg = pickEdgeAtPointer(e.clientX, e.clientY);
+        const hitId = hitSeg ? hitSeg.id : null;
+
+        if (hitId !== state.hoveredLeadSegId) {
+          state.hoveredLeadSegId = hitId;
+          state.hoveredSegmentIds.clear();
+
+          if (hitSeg) {
+            const groupIds = getGroupSegmentIds(state.topology, hitSeg.id, state.selectionMode);
+            for (const id of groupIds) state.hoveredSegmentIds.add(id);
+            canvas.style.cursor = 'pointer';
+          } else {
+            canvas.style.cursor = 'grab';
+          }
+
+          rebuildFeatureEdgeLines();
+          rebuildHighlightTubes();
+        }
+
+        if (hitSeg) {
+          const rect = dom.viewportWrapper.getBoundingClientRect();
+          dom.edgeTooltip.style.left = `${e.clientX - rect.left}px`;
+          dom.edgeTooltip.style.top = `${e.clientY - rect.top}px`;
+          const typeLabel = hitSeg.type === 'convex' ? 'Convex (Outside)' : 'Concave (Inside)';
+          dom.edgeTooltip.innerHTML = `<strong>${typeLabel}</strong> • ${Math.round(hitSeg.dihedralDeg)}° crease`;
+          dom.edgeTooltip.classList.remove('hidden');
+        } else {
+          dom.edgeTooltip.classList.add('hidden');
+        }
+      });
+
+      canvas.addEventListener('pointerup', (e) => {
+        if (e.button !== 0) return;
+        const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+        if (moveDist > 5) return;
+
+        const hitSeg = pickEdgeAtPointer(e.clientX, e.clientY);
+        if (!hitSeg) return;
+
+        const groupIds = getGroupSegmentIds(state.topology, hitSeg.id, state.selectionMode);
+        const allAlreadySelected = groupIds.every((id) => state.selectedSegmentIds.has(id));
+
+        if (allAlreadySelected) {
+          for (const id of groupIds) state.selectedSegmentIds.delete(id);
+        } else {
+          for (const id of groupIds) state.selectedSegmentIds.add(id);
+        }
+
+        rebuildFeatureEdgeLines();
+        rebuildHighlightTubes();
+        updateLivePreviewMesh();
+        updateSelectionUI();
+      });
+
+      window.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+        if (e.key === 'Escape') {
+          if (!dom.librariesModal.classList.contains('hidden')) {
+            closeLibrariesModal();
+            return;
+          }
+          state.selectedSegmentIds.clear();
+          rebuildFeatureEdgeLines();
+          rebuildHighlightTubes();
+          updateLivePreviewMesh();
+          updateSelectionUI();
+        } else if (e.key === 'Enter') {
+          if (state.selectedSegmentIds.size > 0 && !state.isApplying) {
+            handleApplyOperation();
+          }
+        } else if (e.key.toLowerCase() === 'f') {
+          fitCameraToModel();
+        } else if (e.key.toLowerCase() === 'w') {
+          dom.btnToggleWireframe.click();
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+          e.preventDefault();
+          dom.btnUndo.click();
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+          e.preventDefault();
+          dom.btnRedo.click();
+        }
+      });
+    }
+
+    function showToast(message, type = 'info') {
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = message;
+      dom.toastContainer.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 0.25s ease';
+        setTimeout(() => el.remove(), 250);
+      }, 3200);
+    }
+
+    init();
+  </script>
+</body>
+</html>
