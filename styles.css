@@ -173,6 +173,7 @@ body {
   color: var(--text-main);
   background: var(--bg-card);
   white-space: nowrap;
+  text-decoration: none;
 }
 
 .btn:hover:not(:disabled) {
